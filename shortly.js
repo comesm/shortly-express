@@ -1,8 +1,8 @@
 var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
+var session = require('express-session');
 var bodyParser = require('body-parser');
-
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -22,25 +22,101 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
+// ----------------------------------------
+app.use(session({
+  secret: 'keyboard cat',
+  resave: false,
+  saveUninitialized: true
+}));
 
-app.get('/', 
+var restrict = function(req, res, next) {
+  if (req.session.user) {
+    console.log('34');
+    next();
+  } else {
+    // req.session.error = 'Access denied!';
+    // console.log('A Random Label: ', res.req.path);
+    // res.req.path = '/login';
+    req.session.error = 'Error!';
+    res.redirect('/login');
+  }
+};
+// ----------------------------------------
+
+app.get('/', restrict,
 function(req, res) {
   res.render('index');
 });
 
-app.get('/create', 
+app.get('/login', function(req, res) {
+  //console.log('44');
+  res.render('login');
+});
+
+app.post('/login', function(req, res) {
+  new User({username: req.body.username}).fetch().then(function(found) {
+    if (found) {
+      if (found.attributes.password === req.body.password) {
+        console.log('First Pass: ', found.attributes.password, 'Second Pass: ', req.body.password);
+        req.session.regenerate(function() {
+          req.session.user = req.body.username;
+          res.status(200).redirect('/');
+        });
+      } else {
+        res.redirect('/login');
+      }
+    } else {
+      res.redirect('/login');
+    }
+  });
+
+  // Users.create({username: req.body.username,
+  //               password: req.body.password});
+  // res.status(200).send();                
+});
+
+app.get('/signup', function(req, res) {
+  res.render('signup');
+});
+
+app.post('/signup', function(req, res) {
+  console.log('Im listening to sign ups!');
+  // Check if user requested is already in database
+  new User({username: req.body.username}).fetch().then(function(found) {
+    if (!found) {
+      Users.create({
+        username: req.body.username,
+        password: req.body.password
+      }).then(function() {
+        res.status(200).redirect('/');
+      });
+    } else {
+      alert('Username already in use.  Try again!');
+    }
+  });
+
+  if (req.body.username) {
+
+  }
+  // If not, store user and password.
+    // Redirect to login page
+
+  // If it is, alert user "Username already in use!"
+});
+
+app.get('/create', restrict,
 function(req, res) {
   res.render('index');
 });
 
-app.get('/links', 
+app.get('/links', restrict,
 function(req, res) {
   Links.reset().fetch().then(function(links) {
     res.status(200).send(links.models);
   });
 });
 
-app.post('/links', 
+app.post('/links',
 function(req, res) {
   var uri = req.body.url;
 
@@ -85,6 +161,7 @@ function(req, res) {
 /************************************************************/
 
 app.get('/*', function(req, res) {
+
   new Link({ code: req.params[0] }).fetch().then(function(link) {
     if (!link) {
       res.redirect('/');
