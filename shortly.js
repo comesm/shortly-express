@@ -48,6 +48,10 @@ function(req, res) {
   res.render('index');
 });
 
+// These will be moved elsewhere later!
+var bcrypt = require('bcrypt-nodejs');
+var saltRounds = 10;
+
 app.get('/login', function(req, res) {
   //console.log('44');
   res.render('login');
@@ -56,15 +60,16 @@ app.get('/login', function(req, res) {
 app.post('/login', function(req, res) {
   new User({username: req.body.username}).fetch().then(function(found) {
     if (found) {
-      if (found.attributes.password === req.body.password) {
-        console.log('First Pass: ', found.attributes.password, 'Second Pass: ', req.body.password);
-        req.session.regenerate(function() {
-          req.session.user = req.body.username;
-          res.status(200).redirect('/');
-        });
-      } else {
-        res.redirect('/login');
-      }
+      bcrypt.compare(req.body.password, found.attributes.password, function(err, result) {
+        if (result) {
+          req.session.regenerate(function() {
+            req.session.user = req.body.username;
+            res.status(200).redirect('/');
+          });  
+        } else {
+          res.redirect('/login');
+        }
+      });
     } else {
       res.redirect('/login');
     }
@@ -82,13 +87,18 @@ app.get('/signup', function(req, res) {
 app.post('/signup', function(req, res) {
   console.log('Im listening to sign ups!');
   // Check if user requested is already in database
+
   new User({username: req.body.username}).fetch().then(function(found) {
     if (!found) {
-      Users.create({
-        username: req.body.username,
-        password: req.body.password
-      }).then(function() {
-        res.status(200).redirect('/');
+      bcrypt.genSalt(saltRounds).then(function(err, salt) { 
+        return salt;
+      }).bcrypt.hash(req.body.password, salt).then(function(err, hash) {
+        Users.create({
+          username: req.body.username,
+          password: hash
+        }).then(function() {
+          res.status(200).redirect('/');
+        });
       });
     } else {
       alert('Username already in use.  Try again!');
